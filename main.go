@@ -27,14 +27,34 @@ func main() {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Expose-Headers", "Content-Type")
 
-		for i := range 10 {
-			fmt.Fprintf(w, "data: Event %s\n\n", fmt.Sprintf("Event %d", i))
-			time.Sleep(2 * time.Second)
-			w.(http.Flusher).Flush()
+		sdkKey := r.URL.Query().Get("sdk_key")
+		if sdkKey == "" {
+			http.Error(w, "Missing sdk_key parameter", http.StatusBadRequest)
+			return
 		}
+
+		ticker := time.NewTicker(5 * time.Second)
+		go func() {
+			for range ticker.C {
+				// Fetch the features from the database
+				features, err := conn.GetFeatures(sdkKey)
+				if err != nil {
+					log.Printf("Error fetching features for sdk: %s - %+v", sdkKey, err)
+					return
+				}
+				out, err := json.Marshal(features)
+				if err != nil {
+					log.Printf("Error marshalling features for sdk: %s - %+v", sdkKey, err)
+					return
+				}
+				fmt.Fprintf(w, "data: %+v\n\n", string(out))
+				w.(http.Flusher).Flush()
+			}
+		}()
 
 		closeNotify := r.Context().Done()
 		<-closeNotify
+		ticker.Stop()
 	})
 
 	// features
