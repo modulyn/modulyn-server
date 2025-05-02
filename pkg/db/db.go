@@ -124,7 +124,8 @@ func (db *DB) GetFeatures(sdkKey string) ([]*models.Feature, error) {
 		SELECT f.id, f.name, f.enabled, f.json_value, f.created_at, f.updated_at
 		FROM features f
 		JOIN environments e ON f.environment_id = e.id
-		WHERE e.id = ? AND f.is_deleted = 0`
+		WHERE e.id = ? AND f.is_deleted = 0
+		ORDER BY f.updated_at DESC`
 	rows, err := db.Query(query, sdkKey)
 	if err != nil {
 		log.Println("Error querying features from database:", err)
