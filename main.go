@@ -19,6 +19,7 @@ func main() {
 	}
 	defer conn.Close()
 
+	// events
 	http.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"modulyn/pkg/models"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -158,16 +159,51 @@ func (db *DB) GetFeatures(sdkKey string) ([]*models.Feature, error) {
 }
 
 func (db *DB) CreateFeature(createFeatureRequest *models.CreateFeatureRequest) error {
-	// Insert a new flag into the database
-	newID, _ := uuid.NewRandom()
+	// Insert a new feature into the database
 	query := `
-		INSERT INTO features (id, name, enabled, json_value, environment_id)
-		VALUES (?, ?, ?, ?, ?)`
-	_, err := db.Exec(query, newID.String(), createFeatureRequest.Name, createFeatureRequest.Value, createFeatureRequest.JsonValue, createFeatureRequest.EnvironmentID)
+		SELECT id
+		FROM environments
+		WHERE project_id = ? AND is_deleted = 0
+	`
+
+	rows, err := db.Query(query, createFeatureRequest.ProjectID)
 	if err != nil {
-		log.Println("Error inserting features in database:", err)
+		log.Println("Error querying environments from database:", err)
 		return err
 	}
+	defer rows.Close()
+
+	environments := make([]string, 0)
+
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			log.Println("Error scanning row:", err)
+			return err
+		}
+
+		environments = append(environments, id)
+	}
+
+	parameters := make([]any, 0)
+	createQuery := strings.Builder{}
+	createQuery.WriteString(`BEGIN;`)
+	for _, environmentID := range environments {
+		newID, _ := uuid.NewRandom()
+		createQuery.WriteString(`
+			INSERT INTO features (id, name, enabled, json_value, environment_id)
+			VALUES (?, ?, ?, ?, ?);
+		`)
+		parameters = append(parameters, newID.String(), createFeatureRequest.Name, createFeatureRequest.Value, createFeatureRequest.JsonValue, environmentID)
+	}
+	createQuery.WriteString(`COMMIT;`)
+
+	_, err = db.Exec(createQuery.String(), parameters...)
+	if err != nil {
+		log.Println("Error inserting feature in database:", err)
+		return err
+	}
+
 	return nil
 }
 
@@ -201,16 +237,27 @@ func (db *DB) DeleteFeature(featureID string) error {
 
 func (db *DB) CreateProject(createProjectRequest *models.CreateProjectRequest) (string, error) {
 	// Insert a new project into the database
+	query := strings.Builder{}
+	parameters := make([]any, 0)
+	query.WriteString(`BEGIN;`)
 	newID, _ := uuid.NewRandom()
-	query := `
+	projectID := newID.String()
+	query.WriteString(`
 		INSERT INTO projects (id, name)
-		VALUES (?, ?)`
-	_, err := db.Exec(query, newID.String(), createProjectRequest.Name)
+		VALUES (?, ?);`)
+	parameters = append(parameters, projectID, createProjectRequest.Name)
+	query.WriteString(`
+		INSERT INTO environments (id, name, project_id)
+		VALUES (?, ?, ?);
+	`)
+	parameters = append(parameters, fmt.Sprintf("sdk-%s", projectID), "Default", projectID)
+	query.WriteString(`COMMIT;`)
+	_, err := db.Exec(query.String(), parameters...)
 	if err != nil {
 		log.Println("Error inserting project in database:", err)
 		return "", err
 	}
-	return newID.String(), nil
+	return projectID, nil
 }
 
 func (db *DB) GetProjects() ([]*models.Project, error) {

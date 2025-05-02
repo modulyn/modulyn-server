@@ -10,10 +10,10 @@ type Feature struct {
 }
 
 type CreateFeatureRequest struct {
-	Name          string  `json:"name"`
-	Value         bool    `json:"value"`
-	JsonValue     *string `json:"jsonValue,omitempty"`
-	EnvironmentID string  `json:"environmentId"`
+	Name      string  `json:"name"`
+	Value     bool    `json:"value"`
+	JsonValue *string `json:"jsonValue,omitempty"`
+	ProjectID string  `json:"projectId"`
 }
 
 type UpdateFeatureRequest struct {
