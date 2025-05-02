@@ -104,6 +104,7 @@ func InitDB() (Conn, error) {
 	createIndicesSQL := `
 		BEGIN;
 		CREATE INDEX IF NOT EXISTS idx_feature_environment_id ON features (environment_id);
+		CREATE INDEX IF NOT EXISTS idx_feature_updated_at ON features (updated_at);
 		CREATE INDEX IF NOT EXISTS idx_environment_project_id ON environments (project_id);
 		COMMIT;
 	`
