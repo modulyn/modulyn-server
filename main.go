@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"modulyn/pkg/db"
@@ -21,6 +22,7 @@ func main() {
 
 	// events
 	http.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(&w)
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
@@ -60,6 +62,7 @@ func main() {
 
 	// features
 	http.HandleFunc("/api/v1/features", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(&w)
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Expose-Headers", "Content-Type")
@@ -139,8 +142,42 @@ func main() {
 		}
 	})
 
+	// get feature
+	http.HandleFunc("/api/v1/environments/{environmentId}/features/{featureId}", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(&w)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Expose-Headers", "Content-Type")
+
+		switch r.Method {
+		case http.MethodOptions:
+			w.WriteHeader(http.StatusNoContent)
+		case http.MethodGet:
+			environmentID := r.PathValue("environmentId")
+			featureID := r.PathValue("featureId")
+
+			feature, err := conn.GetFeature(featureID, environmentID)
+			if err != nil {
+				if errors.Is(err, db.ErrNoRows) {
+					http.Error(w, "No feature found", http.StatusNoContent)
+					return
+				}
+				http.Error(w, "Failed to get feature", http.StatusInternalServerError)
+				return
+			}
+
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(models.Response{
+				Data: feature,
+			})
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
 	// projects
 	http.HandleFunc("/api/v1/projects", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(&w)
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Expose-Headers", "Content-Type")
@@ -221,6 +258,7 @@ func main() {
 
 	// environments
 	http.HandleFunc("/api/v1/environments", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(&w)
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Expose-Headers", "Content-Type")
@@ -303,4 +341,10 @@ func main() {
 	})
 
 	http.ListenAndServe(":8080", nil)
+}
+
+func enableCors(w *http.ResponseWriter) {
+	(*w).Header().Set("Access-Control-Allow-Origin", "*")
+	(*w).Header().Set("Access-Control-Allow-Headers", "*")
+	(*w).Header().Set("Access-Control-Allow-Methods", "*")
 }

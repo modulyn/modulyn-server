@@ -17,7 +17,8 @@ type CreateFeatureRequest struct {
 }
 
 type UpdateFeatureRequest struct {
-	ID        string  `json:"id"`
-	Value     bool    `json:"value"`
-	JsonValue *string `json:"jsonValue,omitempty"`
+	ID            string  `json:"id"`
+	EnvironmentID string  `json:"environmentId"`
+	Value         bool    `json:"value"`
+	JsonValue     *string `json:"jsonValue,omitempty"`
 }

@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"modulyn/pkg/models"
@@ -13,12 +14,17 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+var (
+	ErrNoRows = errors.New("no results found")
+)
+
 type Conn interface {
 	Close() error
 	CreateFeature(createFeatureRequest *models.CreateFeatureRequest) error
 	GetFeatures(sdkKey string) ([]*models.Feature, error)
 	UpdateFeature(updateFeatureRequest *models.UpdateFeatureRequest) error
 	DeleteFeature(featureID string) error
+	GetFeature(featureID, sdkKey string) (*models.Feature, error)
 	CreateProject(createProjectRequest *models.CreateProjectRequest) (string, error)
 	GetProjects() ([]*models.Project, error)
 	UpdateProject(updateProjectRequest *models.UpdateProjectRequest) error
@@ -214,8 +220,8 @@ func (db *DB) UpdateFeature(updateFeatureRequest *models.UpdateFeatureRequest) e
 	query := `
 		UPDATE features
 		SET enabled = ?, json_value = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?`
-	_, err := db.Exec(query, updateFeatureRequest.Value, updateFeatureRequest.JsonValue, updateFeatureRequest.ID)
+		WHERE id = ? AND environment_id = ?`
+	_, err := db.Exec(query, updateFeatureRequest.Value, updateFeatureRequest.JsonValue, updateFeatureRequest.ID, updateFeatureRequest.EnvironmentID)
 	if err != nil {
 		log.Println("Error updating feature in database:", err)
 		return err
@@ -235,6 +241,36 @@ func (db *DB) DeleteFeature(featureID string) error {
 		return err
 	}
 	return nil
+}
+
+func (db *DB) GetFeature(featureID, sdkKey string) (*models.Feature, error) {
+	query := `
+		SELECT f.id, f.name, f.enabled, f.json_value, f.created_at, f.updated_at
+		FROM features f
+		WHERE f.id = ? AND f.environment_id = ?
+	`
+	var id, name string
+	var enabled int
+	var jsonValue []byte
+	var createdAt, updatedAt time.Time
+	row := db.QueryRow(query, featureID, sdkKey)
+	if err := row.Scan(&id, &name, &enabled, &jsonValue, &createdAt, &updatedAt); err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			log.Println("No rows found")
+			return nil, ErrNoRows
+		}
+		log.Println("Error scanning row:", err)
+		return nil, err
+	}
+
+	return &models.Feature{
+		ID:        id,
+		Name:      name,
+		Enabled:   enabled == 1,
+		JsonValue: string(jsonValue),
+		CreatedAt: createdAt.Format(time.RFC3339),
+		UpdatedAt: updatedAt.Format(time.RFC3339),
+	}, nil
 }
 
 func (db *DB) CreateProject(createProjectRequest *models.CreateProjectRequest) (string, error) {
