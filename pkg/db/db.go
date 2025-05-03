@@ -20,19 +20,19 @@ var (
 
 type Conn interface {
 	Close() error
-	CreateFeature(createFeatureRequest *models.CreateFeatureRequest) error
-	GetFeatures(sdkKey string) ([]*models.Feature, error)
-	UpdateFeature(updateFeatureRequest *models.UpdateFeatureRequest) error
-	DeleteFeature(featureID string) error
-	GetFeature(featureID, sdkKey string) (*models.Feature, error)
+	CreateFeature(projectID, environmentID string, createFeatureRequest *models.CreateFeatureRequest) (string, error)
+	GetFeatures(projectID, environmentID string) ([]*models.Feature, error)
+	UpdateFeature(projectID, environmentID, featureID string, updateFeatureRequest *models.UpdateFeatureRequest) error
+	DeleteFeature(projectID, environmentID, featureID string) error
+	GetFeature(projectID, environmentID, featureID string) (*models.Feature, error)
 	CreateProject(createProjectRequest *models.CreateProjectRequest) (string, error)
 	GetProjects() ([]*models.Project, error)
-	UpdateProject(updateProjectRequest *models.UpdateProjectRequest) error
+	UpdateProject(projectID string, updateProjectRequest *models.UpdateProjectRequest) error
 	DeleteProject(projectID string) error
-	CreateEnvironment(createEnvironmentRequest *models.CreateEnvironmentRequest) (string, error)
+	CreateEnvironment(projectID string, createEnvironmentRequest *models.CreateEnvironmentRequest) (string, error)
 	GetEnvironments(projectID string) ([]*models.Environment, error)
-	UpdateEnvironment(updateEnvironmentRequest *models.UpdateEnvironmentRequest) error
-	DeleteEnvironment(environmentID string) error
+	UpdateEnvironment(projectID, environmentID string, updateEnvironmentRequest *models.UpdateEnvironmentRequest) error
+	DeleteEnvironment(projectID, environmentID string) error
 }
 
 type DB struct {
@@ -91,25 +91,27 @@ func InitDB() (Conn, error) {
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
 			environment_id TEXT NOT NULL,
+			project_id TEXT NOT NULL,
 			enabled INTEGER NOT NULL,
 			json_value blob,
 			is_deleted INTEGER DEFAULT 0,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			deleted_at DATETIME,
-			FOREIGN KEY (environment_id) REFERENCES environments(id)
+			FOREIGN KEY (environment_id) REFERENCES environments(id),
+			FOREIGN KEY (project_id) REFERENCES projects(id)
 		);
 	`
 	_, err = db.Exec(createFeaturesTableSQL)
 	if err != nil {
 		return nil, err
 	}
-	log.Println("Created flags table")
+	log.Println("Created features table")
 
 	// create indices for the tables
 	createIndicesSQL := `
 		BEGIN;
-		CREATE INDEX IF NOT EXISTS idx_feature_environment_id ON features (environment_id);
+		CREATE INDEX IF NOT EXISTS idx_feature_project_id_environment_id ON features (project_id, environment_id);
 		CREATE INDEX IF NOT EXISTS idx_feature_updated_at ON features (updated_at);
 		CREATE INDEX IF NOT EXISTS idx_environment_project_id ON environments (project_id);
 		COMMIT;
@@ -125,15 +127,14 @@ func InitDB() (Conn, error) {
 	}, nil
 }
 
-func (db *DB) GetFeatures(sdkKey string) ([]*models.Feature, error) {
+func (db *DB) GetFeatures(projectID, environmentID string) ([]*models.Feature, error) {
 	// Query the database for flags associated with the given SDK key
 	query := `
 		SELECT f.id, f.name, f.enabled, f.json_value, f.created_at, f.updated_at
 		FROM features f
-		JOIN environments e ON f.environment_id = e.id
-		WHERE e.id = ? AND f.is_deleted = 0
+		WHERE f.environment_id = ? AND f.project_id = ? AND f.is_deleted = 0
 		ORDER BY f.updated_at DESC`
-	rows, err := db.Query(query, sdkKey)
+	rows, err := db.Query(query, environmentID, projectID)
 	if err != nil {
 		log.Println("Error querying features from database:", err)
 		return nil, err
@@ -166,62 +167,29 @@ func (db *DB) GetFeatures(sdkKey string) ([]*models.Feature, error) {
 	return features, nil
 }
 
-func (db *DB) CreateFeature(createFeatureRequest *models.CreateFeatureRequest) error {
-	// Insert a new feature into the database
+func (db *DB) CreateFeature(projectID, environmentID string, createFeatureRequest *models.CreateFeatureRequest) (string, error) {
 	query := `
-		SELECT id
-		FROM environments
-		WHERE project_id = ? AND is_deleted = 0
+		INSERT INTO features (id, name, enabled, json_value, environment_id, project_id)
+		VALUES (?, ?, ?, ?, ?, ?);
 	`
+	newID, _ := uuid.NewRandom()
 
-	rows, err := db.Query(query, createFeatureRequest.ProjectID)
-	if err != nil {
-		log.Println("Error querying environments from database:", err)
-		return err
-	}
-	defer rows.Close()
-
-	environments := make([]string, 0)
-
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			log.Println("Error scanning row:", err)
-			return err
-		}
-
-		environments = append(environments, id)
-	}
-
-	parameters := make([]any, 0)
-	createQuery := strings.Builder{}
-	createQuery.WriteString(`BEGIN;`)
-	for _, environmentID := range environments {
-		newID, _ := uuid.NewRandom()
-		createQuery.WriteString(`
-			INSERT INTO features (id, name, enabled, json_value, environment_id)
-			VALUES (?, ?, ?, ?, ?);
-		`)
-		parameters = append(parameters, newID.String(), createFeatureRequest.Name, createFeatureRequest.Value, createFeatureRequest.JsonValue, environmentID)
-	}
-	createQuery.WriteString(`COMMIT;`)
-
-	_, err = db.Exec(createQuery.String(), parameters...)
+	_, err := db.Exec(query, newID.String(), createFeatureRequest.Name, false, nil, environmentID, projectID)
 	if err != nil {
 		log.Println("Error inserting feature in database:", err)
-		return err
+		return "", err
 	}
 
-	return nil
+	return newID.String(), nil
 }
 
-func (db *DB) UpdateFeature(updateFeatureRequest *models.UpdateFeatureRequest) error {
+func (db *DB) UpdateFeature(projectID, environmentID, featureID string, updateFeatureRequest *models.UpdateFeatureRequest) error {
 	// Update an existing flag in the database
 	query := `
 		UPDATE features
 		SET enabled = ?, json_value = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ? AND environment_id = ?`
-	_, err := db.Exec(query, updateFeatureRequest.Value, updateFeatureRequest.JsonValue, updateFeatureRequest.ID, updateFeatureRequest.EnvironmentID)
+		WHERE id = ? AND environment_id = ? AND project_id = ?`
+	_, err := db.Exec(query, updateFeatureRequest.Value, updateFeatureRequest.JsonValue, featureID, environmentID, projectID)
 	if err != nil {
 		log.Println("Error updating feature in database:", err)
 		return err
@@ -229,13 +197,13 @@ func (db *DB) UpdateFeature(updateFeatureRequest *models.UpdateFeatureRequest) e
 	return nil
 }
 
-func (db *DB) DeleteFeature(featureID string) error {
+func (db *DB) DeleteFeature(projectID, environmentID, featureID string) error {
 	// Soft delete a flag by marking it as deleted
 	query := `
 		UPDATE features
 		SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
-		WHERE id = ?`
-	_, err := db.Exec(query, featureID)
+		WHERE id = ? AND environment_id = ? AND project_id = ?`
+	_, err := db.Exec(query, featureID, environmentID, projectID)
 	if err != nil {
 		log.Println("Error deleting feature in database:", err)
 		return err
@@ -243,17 +211,17 @@ func (db *DB) DeleteFeature(featureID string) error {
 	return nil
 }
 
-func (db *DB) GetFeature(featureID, sdkKey string) (*models.Feature, error) {
+func (db *DB) GetFeature(projectID, environmentID, featureID string) (*models.Feature, error) {
 	query := `
 		SELECT f.id, f.name, f.enabled, f.json_value, f.created_at, f.updated_at
 		FROM features f
-		WHERE f.id = ? AND f.environment_id = ?
+		WHERE f.id = ? AND f.environment_id = ? AND f.project_id = ?
 	`
 	var id, name string
 	var enabled int
 	var jsonValue []byte
 	var createdAt, updatedAt time.Time
-	row := db.QueryRow(query, featureID, sdkKey)
+	row := db.QueryRow(query, featureID, environmentID, projectID)
 	if err := row.Scan(&id, &name, &enabled, &jsonValue, &createdAt, &updatedAt); err != nil {
 		if err.Error() == "sql: no rows in result set" {
 			log.Println("No rows found")
@@ -329,13 +297,12 @@ func (db *DB) GetProjects() ([]*models.Project, error) {
 	return projects, nil
 }
 
-func (db *DB) UpdateProject(updateProjectRequest *models.UpdateProjectRequest) error {
-	// Update an existing project in the database
+func (db *DB) UpdateProject(projectID string, updateProjectRequest *models.UpdateProjectRequest) error {
 	query := `
 		UPDATE projects
 		SET name = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?`
-	_, err := db.Exec(query, updateProjectRequest.Name, updateProjectRequest.ID)
+	_, err := db.Exec(query, updateProjectRequest.Name, projectID)
 	if err != nil {
 		log.Println("Error updating project in database:", err)
 		return err
@@ -357,14 +324,13 @@ func (db *DB) DeleteProject(projectID string) error {
 	return nil
 }
 
-func (db *DB) CreateEnvironment(createEnvironmentRequest *models.CreateEnvironmentRequest) (string, error) {
-	// Insert a new environment into the database
+func (db *DB) CreateEnvironment(projectID string, createEnvironmentRequest *models.CreateEnvironmentRequest) (string, error) {
 	newID, _ := uuid.NewRandom()
 	sdkKey := fmt.Sprintf("sdk-%s", newID.String())
 	query := `
 		INSERT INTO environments (id, name, project_id)
 		VALUES (?, ?, ?)`
-	_, err := db.Exec(query, sdkKey, createEnvironmentRequest.Name, createEnvironmentRequest.ProjectID)
+	_, err := db.Exec(query, sdkKey, createEnvironmentRequest.Name, projectID)
 	if err != nil {
 		log.Println("Error inserting environment in database:", err)
 		return "", err
@@ -373,7 +339,6 @@ func (db *DB) CreateEnvironment(createEnvironmentRequest *models.CreateEnvironme
 }
 
 func (db *DB) GetEnvironments(projectID string) ([]*models.Environment, error) {
-	// Query the database for environments associated with the given project ID
 	query := `
 		SELECT id, name
 		FROM environments
@@ -404,13 +369,12 @@ func (db *DB) GetEnvironments(projectID string) ([]*models.Environment, error) {
 	return environments, nil
 }
 
-func (db *DB) UpdateEnvironment(updateEnvironmentRequest *models.UpdateEnvironmentRequest) error {
-	// Update an existing environment in the database
+func (db *DB) UpdateEnvironment(projectID, environmentID string, updateEnvironmentRequest *models.UpdateEnvironmentRequest) error {
 	query := `
 		UPDATE environments
 		SET name = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?`
-	_, err := db.Exec(query, updateEnvironmentRequest.Name, updateEnvironmentRequest.ID)
+		WHERE id = ? AND project_id = ?`
+	_, err := db.Exec(query, updateEnvironmentRequest.Name, environmentID, projectID)
 	if err != nil {
 		log.Println("Error updating environment in database:", err)
 		return err
@@ -418,13 +382,12 @@ func (db *DB) UpdateEnvironment(updateEnvironmentRequest *models.UpdateEnvironme
 	return nil
 }
 
-func (db *DB) DeleteEnvironment(environmentID string) error {
-	// Soft delete an environment by marking it as deleted
+func (db *DB) DeleteEnvironment(projectID, environmentID string) error {
 	query := `
 		UPDATE environments
 		SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
-		WHERE id = ?`
-	_, err := db.Exec(query, environmentID)
+		WHERE id = ? AND project_id = ?`
+	_, err := db.Exec(query, environmentID, projectID)
 	if err != nil {
 		log.Println("Error deleting environment in database:", err)
 		return err

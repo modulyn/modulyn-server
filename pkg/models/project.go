@@ -5,7 +5,6 @@ type CreateProjectRequest struct {
 }
 
 type UpdateProjectRequest struct {
-	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
