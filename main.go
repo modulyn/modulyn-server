@@ -321,6 +321,20 @@ func main() {
 		switch r.Method {
 		case http.MethodOptions:
 			w.WriteHeader(http.StatusNoContent)
+		case http.MethodGet:
+			projectID := r.PathValue("projectId")
+			environmentID := r.PathValue("environmentId")
+			environment, err := conn.GetEnvironment(projectID, environmentID)
+			if err != nil {
+				log.Println("Error fetching environment:", err)
+				http.Error(w, "Failed to get environment", http.StatusInternalServerError)
+				return
+			}
+
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(models.Response{
+				Data: environment,
+			})
 		case http.MethodPut:
 			projectID := r.PathValue("projectId")
 			environmentID := r.PathValue("environmentId")

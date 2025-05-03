@@ -31,6 +31,7 @@ type Conn interface {
 	DeleteProject(projectID string) error
 	CreateEnvironment(projectID string, createEnvironmentRequest *models.CreateEnvironmentRequest) (string, error)
 	GetEnvironments(projectID string) ([]*models.Environment, error)
+	GetEnvironment(projectID, environmentID string) (*models.Environment, error)
 	UpdateEnvironment(projectID, environmentID string, updateEnvironmentRequest *models.UpdateEnvironmentRequest) error
 	DeleteEnvironment(projectID, environmentID string) error
 }
@@ -367,6 +368,29 @@ func (db *DB) GetEnvironments(projectID string) ([]*models.Environment, error) {
 	}
 
 	return environments, nil
+}
+
+func (db *DB) GetEnvironment(projectID, environmentID string) (*models.Environment, error) {
+	query := `
+		SELECT e.id, e.name
+		FROM environments e
+		WHERE e.id = ? AND e.project_id = ?
+	`
+	var id, name string
+	row := db.QueryRow(query, environmentID, projectID)
+	if err := row.Scan(&id, &name); err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			log.Println("No rows found")
+			return nil, ErrNoRows
+		}
+		log.Println("Error scanning row:", err)
+		return nil, err
+	}
+
+	return &models.Environment{
+		ID:   id,
+		Name: name,
+	}, nil
 }
 
 func (db *DB) UpdateEnvironment(projectID, environmentID string, updateEnvironmentRequest *models.UpdateEnvironmentRequest) error {
