@@ -190,7 +190,7 @@ func (db *DB) UpdateFeature(projectID, environmentID, featureID string, updateFe
 		UPDATE features
 		SET enabled = ?, json_value = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ? AND environment_id = ? AND project_id = ?`
-	_, err := db.Exec(query, updateFeatureRequest.Value, updateFeatureRequest.JsonValue, featureID, environmentID, projectID)
+	_, err := db.Exec(query, updateFeatureRequest.Enabled, updateFeatureRequest.JsonValue, featureID, environmentID, projectID)
 	if err != nil {
 		log.Println("Error updating feature in database:", err)
 		return err

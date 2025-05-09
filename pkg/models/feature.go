@@ -14,6 +14,6 @@ type CreateFeatureRequest struct {
 }
 
 type UpdateFeatureRequest struct {
-	Value     bool    `json:"value"`
+	Enabled   bool    `json:"enabled"`
 	JsonValue *string `json:"jsonValue,omitempty"`
 }
