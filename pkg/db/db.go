@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -155,11 +156,14 @@ func (db *DB) GetFeatures(projectID, environmentID string) ([]*models.Feature, e
 			return nil, err
 		}
 
+		var jsonVal []models.JsonValue
+		json.Unmarshal(jsonValue, &jsonVal)
+
 		features = append(features, &models.Feature{
 			ID:        id,
 			Name:      name,
 			Enabled:   enabled == 1,
-			JsonValue: string(jsonValue),
+			JsonValue: jsonVal,
 			CreatedAt: createdAt.Format(time.RFC3339),
 			UpdatedAt: updatedAt.Format(time.RFC3339),
 		})
@@ -186,11 +190,12 @@ func (db *DB) CreateFeature(projectID, environmentID string, createFeatureReques
 
 func (db *DB) UpdateFeature(projectID, environmentID, featureID string, updateFeatureRequest *models.UpdateFeatureRequest) error {
 	// Update an existing flag in the database
+	jsonValueBytes, _ := json.Marshal(updateFeatureRequest.JsonValue)
 	query := `
 		UPDATE features
 		SET enabled = ?, json_value = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ? AND environment_id = ? AND project_id = ?`
-	_, err := db.Exec(query, updateFeatureRequest.Enabled, updateFeatureRequest.JsonValue, featureID, environmentID, projectID)
+	_, err := db.Exec(query, updateFeatureRequest.Enabled, jsonValueBytes, featureID, environmentID, projectID)
 	if err != nil {
 		log.Println("Error updating feature in database:", err)
 		return err
@@ -232,11 +237,14 @@ func (db *DB) GetFeature(projectID, environmentID, featureID string) (*models.Fe
 		return nil, err
 	}
 
+	var jsonVal []models.JsonValue
+	json.Unmarshal(jsonValue, &jsonVal)
+
 	return &models.Feature{
 		ID:        id,
 		Name:      name,
 		Enabled:   enabled == 1,
-		JsonValue: string(jsonValue),
+		JsonValue: jsonVal,
 		CreatedAt: createdAt.Format(time.RFC3339),
 		UpdatedAt: updatedAt.Format(time.RFC3339),
 	}, nil
