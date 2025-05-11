@@ -156,7 +156,7 @@ func (db *DB) GetFeatures(projectID, environmentID string) ([]*models.Feature, e
 			return nil, err
 		}
 
-		var jsonVal []models.JsonValue
+		var jsonVal models.JsonValue
 		json.Unmarshal(jsonValue, &jsonVal)
 
 		features = append(features, &models.Feature{
@@ -237,7 +237,7 @@ func (db *DB) GetFeature(projectID, environmentID, featureID string) (*models.Fe
 		return nil, err
 	}
 
-	var jsonVal []models.JsonValue
+	var jsonVal models.JsonValue
 	json.Unmarshal(jsonValue, &jsonVal)
 
 	return &models.Feature{
