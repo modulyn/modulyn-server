@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"modulyn/pkg/db"
+	"modulyn/pkg/server"
 	"net/http"
 )
 
@@ -16,12 +17,14 @@ type Controller interface {
 }
 
 type controller struct {
-	conn db.Conn
+	conn  db.Conn
+	store server.Store
 }
 
-func New(conn db.Conn) Controller {
+func New(conn db.Conn, store server.Store) Controller {
 	return &controller{
-		conn: conn,
+		conn:  conn,
+		store: store,
 	}
 }
 

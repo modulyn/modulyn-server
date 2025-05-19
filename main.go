@@ -4,11 +4,14 @@ import (
 	"log"
 	"modulyn/pkg/controllers"
 	"modulyn/pkg/db"
+	"modulyn/pkg/server"
 	"net/http"
 )
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	store := server.NewStore()
 
 	conn, err := db.InitDB()
 	if err != nil {
@@ -16,7 +19,7 @@ func main() {
 	}
 	defer conn.Close()
 
-	controllers := controllers.New(conn)
+	controllers := controllers.New(conn, store)
 
 	// events
 	http.HandleFunc("/events", controllers.EventsController)

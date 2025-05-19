@@ -1,9 +1,8 @@
 package controllers
 
 import (
-	"encoding/json"
 	"fmt"
-	"log"
+	"modulyn/pkg/models"
 	"net/http"
 	"time"
 )
@@ -24,23 +23,24 @@ func (c *controller) EventsController(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	projectId := r.URL.Query().Get("project_id")
+	appId := r.URL.Query().Get("appid")
+	if appId == "" {
+		http.Error(w, "Missing appid parameter", http.StatusBadRequest)
+		return
+	}
+
+	client := models.Client{
+		SDKKey: sdkKey,
+		AppID:  appId,
+	}
+	c.store.Subscribe(client)
+	defer c.store.Unsubscribe(client)
 
 	ticker := time.NewTicker(5 * time.Second)
 	go func() {
 		for range ticker.C {
-			// Fetch the features from the database
-			features, err := c.conn.GetFeatures(projectId, sdkKey)
-			if err != nil {
-				log.Printf("Error fetching features for sdk: %s - %+v", sdkKey, err)
-				return
-			}
-			out, err := json.Marshal(features)
-			if err != nil {
-				log.Printf("Error marshalling features for sdk: %s - %+v", sdkKey, err)
-				return
-			}
-			fmt.Fprintf(w, "data: %+v\n\n", string(out))
+			events := "events"
+			fmt.Fprintf(w, "data: %+v\n\n", events)
 			w.(http.Flusher).Flush()
 		}
 	}()
