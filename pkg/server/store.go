@@ -33,3 +33,13 @@ func (s *store) Unsubscribe(client models.Client) {
 	delete(s.clients, client)
 	s.mu.Unlock()
 }
+
+func (s *store) NotifyClients(event models.Event, environmentID string) {
+	s.mu.RLock()
+	for client := range s.clients {
+		if client.SDKKey == environmentID {
+			client.Messages <- event
+		}
+	}
+	s.mu.RUnlock()
+}

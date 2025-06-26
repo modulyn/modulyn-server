@@ -72,7 +72,7 @@ func (c *controller) FeatureByIdControllers(w http.ResponseWriter, r *http.Reque
 		projectID := r.PathValue("projectId")
 		environmentID := r.PathValue("environmentId")
 		featureID := r.PathValue("featureId")
-
+ 
 		feature, err := c.conn.GetFeature(projectID, environmentID, featureID)
 		if err != nil {
 			if errors.Is(err, db.ErrNoRows) {

@@ -23,6 +23,7 @@ type Conn interface {
 	Close() error
 	CreateFeature(projectID, environmentID string, createFeatureRequest *models.CreateFeatureRequest) (string, error)
 	GetFeatures(projectID, environmentID string) ([]*models.Feature, error)
+	GetFeaturesByEnvironmentID(environmentID string) ([]*models.Feature, error)
 	UpdateFeature(projectID, environmentID, featureID string, updateFeatureRequest *models.UpdateFeatureRequest) error
 	DeleteFeature(projectID, environmentID, featureID string) error
 	GetFeature(projectID, environmentID, featureID string) (*models.Feature, error)
@@ -137,6 +138,49 @@ func (db *DB) GetFeatures(projectID, environmentID string) ([]*models.Feature, e
 		WHERE f.environment_id = ? AND f.project_id = ? AND f.is_deleted = 0
 		ORDER BY f.updated_at DESC`
 	rows, err := db.Query(query, environmentID, projectID)
+	if err != nil {
+		log.Println("Error querying features from database:", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	features := make([]*models.Feature, 0)
+
+	for rows.Next() {
+		var id, name string
+		var enabled int
+		var jsonValue []byte
+		var createdAt, updatedAt time.Time
+
+		if err := rows.Scan(&id, &name, &enabled, &jsonValue, &createdAt, &updatedAt); err != nil {
+			log.Println("Error scanning row:", err)
+			return nil, err
+		}
+
+		var jsonVal models.JsonValue
+		json.Unmarshal(jsonValue, &jsonVal)
+
+		features = append(features, &models.Feature{
+			ID:        id,
+			Name:      name,
+			Enabled:   enabled == 1,
+			JsonValue: jsonVal,
+			CreatedAt: createdAt.Format(time.RFC3339),
+			UpdatedAt: updatedAt.Format(time.RFC3339),
+		})
+	}
+
+	return features, nil
+}
+
+func (db *DB) GetFeaturesByEnvironmentID(environmentID string) ([]*models.Feature, error) {
+	// Query the database for flags associated with the given SDK key
+	query := `
+		SELECT f.id, f.name, f.enabled, f.json_value, f.created_at, f.updated_at
+		FROM features f
+		WHERE f.environment_id = ? AND f.is_deleted = 0
+		ORDER BY f.updated_at DESC`
+	rows, err := db.Query(query, environmentID)
 	if err != nil {
 		log.Println("Error querying features from database:", err)
 		return nil, err

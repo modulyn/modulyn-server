@@ -1,10 +1,10 @@
 package controllers
 
 import (
+	"encoding/json"
 	"fmt"
 	"modulyn/pkg/models"
 	"net/http"
-	"time"
 )
 
 func (c *controller) EventsController(w http.ResponseWriter, r *http.Request) {
@@ -30,22 +30,37 @@ func (c *controller) EventsController(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := models.Client{
-		SDKKey: sdkKey,
-		AppID:  appId,
+		SDKKey:   sdkKey,
+		AppID:    appId,
+		Messages: make(chan models.Event),
 	}
 	c.store.Subscribe(client)
 	defer c.store.Unsubscribe(client)
 
-	ticker := time.NewTicker(5 * time.Second)
 	go func() {
-		for range ticker.C {
-			events := "events"
-			fmt.Fprintf(w, "data: %+v\n\n", events)
+		for event := range client.Messages {
+			data, _ := json.Marshal(event)
+			fmt.Fprintf(w, "data: %s\n\n", data)
 			w.(http.Flusher).Flush()
 		}
 	}()
 
+	// send all features to the client when they connect
+	features, err := c.conn.GetFeaturesByEnvironmentID(sdkKey)
+	if err != nil {
+		http.Error(w, "Failed to get features", http.StatusInternalServerError)
+		return
+	}
+
+	// send the features as an initial event
+	featuresData, _ := json.Marshal(features)
+	initialEvent := models.Event{
+		Type: "all_features",
+		Data: featuresData,
+	}
+
+	client.Messages <- initialEvent
+
 	closeNotify := r.Context().Done()
 	<-closeNotify
-	ticker.Stop()
 }
