@@ -54,6 +54,19 @@ func (c *controller) FeaturesController(w http.ResponseWriter, r *http.Request) 
 		json.NewEncoder(w).Encode(models.Response{
 			Data: featureID,
 		})
+
+		newFeature, err := c.conn.GetFeature(projectID, environmentID, featureID)
+		if err != nil {
+			log.Println("Error getting new feature:", err)
+			return
+		}
+		bytes, _ := json.Marshal(newFeature)
+		event := models.Event{
+			Type: "feature_created",
+			Data: bytes,
+		}
+
+		c.store.NotifyClients(event, environmentID)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -72,7 +85,7 @@ func (c *controller) FeatureByIdControllers(w http.ResponseWriter, r *http.Reque
 		projectID := r.PathValue("projectId")
 		environmentID := r.PathValue("environmentId")
 		featureID := r.PathValue("featureId")
- 
+
 		feature, err := c.conn.GetFeature(projectID, environmentID, featureID)
 		if err != nil {
 			if errors.Is(err, db.ErrNoRows) {
@@ -106,10 +119,25 @@ func (c *controller) FeatureByIdControllers(w http.ResponseWriter, r *http.Reque
 		}
 
 		w.WriteHeader(http.StatusOK)
+
+		updatedFeature, err := c.conn.GetFeature(projectID, environmentID, featureID)
+		if err != nil {
+			log.Println("Error getting new feature:", err)
+			return
+		}
+		bytes, _ := json.Marshal(updatedFeature)
+		event := models.Event{
+			Type: "feature_updated",
+			Data: bytes,
+		}
+
+		c.store.NotifyClients(event, environmentID)
 	case http.MethodDelete:
 		projectID := r.PathValue("projectId")
 		environmentID := r.PathValue("environmentId")
 		featureID := r.PathValue("featureId")
+
+		existingFeature, _ := c.conn.GetFeature(projectID, environmentID, featureID)
 
 		if err := c.conn.DeleteFeature(projectID, environmentID, featureID); err != nil {
 			log.Println("Error deleting feature:", err)
@@ -118,6 +146,14 @@ func (c *controller) FeatureByIdControllers(w http.ResponseWriter, r *http.Reque
 		}
 
 		w.WriteHeader(http.StatusOK)
+
+		bytes, _ := json.Marshal(existingFeature)
+		event := models.Event{
+			Type: "feature_deleted",
+			Data: bytes,
+		}
+
+		c.store.NotifyClients(event, environmentID)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}

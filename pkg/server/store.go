@@ -13,6 +13,7 @@ type store struct {
 type Store interface {
 	Subscribe(client models.Client)
 	Unsubscribe(client models.Client)
+	NotifyClients(event models.Event, environmentID string)
 }
 
 func NewStore() Store {
