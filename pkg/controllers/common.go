@@ -9,6 +9,7 @@ import (
 type Controller interface {
 	EventsController(w http.ResponseWriter, r *http.Request)
 	FeaturesController(w http.ResponseWriter, r *http.Request)
+	FeaturesByEnvironmentIDController(w http.ResponseWriter, r *http.Request)
 	FeatureByIdControllers(w http.ResponseWriter, r *http.Request)
 	ProjectsController(w http.ResponseWriter, r *http.Request)
 	ProjectByIdControllers(w http.ResponseWriter, r *http.Request)

@@ -1,12 +1,17 @@
 package models
 
 type Feature struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Enabled   bool      `json:"enabled"`
-	JsonValue JsonValue `json:"jsonValue"`
-	CreatedAt string    `json:"createdAt"`
-	UpdatedAt string    `json:"updatedAt"`
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Enabled         bool      `json:"enabled"`
+	JsonValue       JsonValue `json:"jsonValue"`
+	CreatedAt       string    `json:"createdAt"`
+	UpdatedAt       string    `json:"updatedAt"`
+	DeletedAt       string    `json:"deletedAt"`
+	EnvironmentID   string    `json:"environmentId"`
+	EnvironmentName string    `json:"environmentName"`
+	ProjectID       string    `json:"projectId"`
+	ProjectName     string    `json:"projectName"`
 }
 
 type CreateFeatureRequest struct {

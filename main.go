@@ -25,7 +25,9 @@ func main() {
 	http.HandleFunc("/events", controllers.EventsController)
 
 	// features
-	http.HandleFunc("/api/v1/projects/{projectId}/environments/{environmentId}/features", controllers.FeaturesController)
+	http.HandleFunc("/api/v1/projects/{projectId}/features", controllers.FeaturesController)
+
+	http.HandleFunc("/api/v1/projects/{projectId}/environments/{environmentId}/features", controllers.FeaturesByEnvironmentIDController)
 
 	http.HandleFunc("/api/v1/projects/{projectId}/environments/{environmentId}/features/{featureId}", controllers.FeatureByIdControllers)
 
