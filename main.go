@@ -4,8 +4,10 @@ import (
 	"log"
 	"modulyn/pkg/controllers"
 	"modulyn/pkg/db"
+	"modulyn/pkg/middlewares"
 	"modulyn/pkg/server"
 	"net/http"
+	"os"
 )
 
 func main() {
@@ -13,7 +15,7 @@ func main() {
 
 	store := server.NewStore()
 
-	conn, err := db.InitDB()
+	conn, err := db.InitDB(os.Getenv("ENABLE_SQL_LOGGING") == "true")
 	if err != nil {
 		log.Fatalln("Failed to initialize database: ", err)
 	}
@@ -21,25 +23,29 @@ func main() {
 
 	controllers := controllers.New(conn, store)
 
+	mux := http.NewServeMux()
+
 	// events
-	http.HandleFunc("/events", controllers.EventsController)
+	mux.HandleFunc("/events", controllers.EventsController)
 
 	// features
-	http.HandleFunc("/api/v1/projects/{projectId}/features", controllers.FeaturesController)
+	mux.HandleFunc("/api/v1/projects/{projectId}/features", controllers.FeaturesController)
 
-	http.HandleFunc("/api/v1/projects/{projectId}/environments/{environmentId}/features", controllers.FeaturesByEnvironmentIDController)
+	mux.HandleFunc("/api/v1/projects/{projectId}/environments/{environmentId}/features", controllers.FeaturesByEnvironmentIDController)
 
-	http.HandleFunc("/api/v1/projects/{projectId}/environments/{environmentId}/features/{featureId}", controllers.FeatureByIdControllers)
+	mux.HandleFunc("/api/v1/projects/{projectId}/environments/{environmentId}/features/{featureId}", controllers.FeatureByIdControllers)
 
 	// projects
-	http.HandleFunc("/api/v1/projects", controllers.ProjectsController)
+	mux.HandleFunc("/api/v1/projects", controllers.ProjectsController)
 
-	http.HandleFunc("/api/v1/projects/{projectId}", controllers.ProjectByIdControllers)
+	mux.HandleFunc("/api/v1/projects/{projectId}", controllers.ProjectByIdControllers)
 
 	// environments
-	http.HandleFunc("/api/v1/projects/{projectId}/environments", controllers.EnvironmentsController)
+	mux.HandleFunc("/api/v1/projects/{projectId}/environments", controllers.EnvironmentsController)
 
-	http.HandleFunc("/api/v1/projects/{projectId}/environments/{environmentId}", controllers.EnvironmentByIdControllers)
+	mux.HandleFunc("/api/v1/projects/{projectId}/environments/{environmentId}", controllers.EnvironmentByIdControllers)
 
-	http.ListenAndServe(":8080", nil)
+	handler := middlewares.CorrelationMiddleware(mux)
+
+	http.ListenAndServe(":8080", handler)
 }

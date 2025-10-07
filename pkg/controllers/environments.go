@@ -19,7 +19,7 @@ func (c *controller) EnvironmentsController(w http.ResponseWriter, r *http.Reque
 	case http.MethodGet:
 		projectID := r.PathValue("projectId")
 
-		environments, err := c.conn.GetEnvironments(projectID)
+		environments, err := c.conn.GetEnvironments(r.Context(), projectID)
 		if err != nil {
 			http.Error(w, "Failed to get environments", http.StatusInternalServerError)
 			return
@@ -38,7 +38,7 @@ func (c *controller) EnvironmentsController(w http.ResponseWriter, r *http.Reque
 		}
 		defer r.Body.Close()
 
-		environmentID, err := c.conn.CreateEnvironment(projectID, &createEnvironmentRequest)
+		environmentID, err := c.conn.CreateEnvironment(r.Context(), projectID, &createEnvironmentRequest)
 		if err != nil {
 			log.Println("Error creating environment:", err)
 			http.Error(w, "Failed to create environment", http.StatusInternalServerError)
@@ -66,7 +66,7 @@ func (c *controller) EnvironmentByIdControllers(w http.ResponseWriter, r *http.R
 	case http.MethodGet:
 		projectID := r.PathValue("projectId")
 		environmentID := r.PathValue("environmentId")
-		environment, err := c.conn.GetEnvironment(projectID, environmentID)
+		environment, err := c.conn.GetEnvironment(r.Context(), projectID, environmentID)
 		if err != nil {
 			log.Println("Error fetching environment:", err)
 			http.Error(w, "Failed to get environment", http.StatusInternalServerError)
@@ -88,7 +88,7 @@ func (c *controller) EnvironmentByIdControllers(w http.ResponseWriter, r *http.R
 		}
 		defer r.Body.Close()
 
-		if err := c.conn.UpdateEnvironment(projectID, environmentID, &updateEnvironmentRequest); err != nil {
+		if err := c.conn.UpdateEnvironment(r.Context(), projectID, environmentID, &updateEnvironmentRequest); err != nil {
 			log.Println("Error updating environment:", err)
 			http.Error(w, "Failed to update environment", http.StatusInternalServerError)
 			return
@@ -100,7 +100,7 @@ func (c *controller) EnvironmentByIdControllers(w http.ResponseWriter, r *http.R
 		projectID := r.PathValue("projectId")
 		environmentID := r.PathValue("environmentId")
 
-		if err := c.conn.DeleteEnvironment(projectID, environmentID); err != nil {
+		if err := c.conn.DeleteEnvironment(r.Context(), projectID, environmentID); err != nil {
 			log.Println("Error deleting environment:", err)
 		}
 

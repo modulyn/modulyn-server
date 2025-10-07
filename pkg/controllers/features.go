@@ -22,7 +22,7 @@ func (c *controller) FeaturesController(w http.ResponseWriter, r *http.Request) 
 	case http.MethodGet:
 		projectID := r.PathValue("projectId")
 
-		features, err := c.conn.GetFeaturesByProjectID(projectID)
+		features, err := c.conn.GetFeaturesByProjectID(r.Context(), projectID)
 		if err != nil {
 			http.Error(w, "Failed to get features", http.StatusInternalServerError)
 			return
@@ -42,7 +42,7 @@ func (c *controller) FeaturesController(w http.ResponseWriter, r *http.Request) 
 		}
 		defer r.Body.Close()
 
-		environments, err := c.conn.GetEnvironments(projectID)
+		environments, err := c.conn.GetEnvironments(r.Context(), projectID)
 		if err != nil {
 			log.Println("Error getting environments:", err)
 			http.Error(w, "Failed to create feature", http.StatusInternalServerError)
@@ -51,25 +51,28 @@ func (c *controller) FeaturesController(w http.ResponseWriter, r *http.Request) 
 
 		featureID, _ := uuid.NewRandom()
 
+		if err := c.conn.CreateFeature(r.Context(), featureID.String(), projectID, environments, &createFeatureRequest); err != nil {
+			log.Println("Error creating feature:", err)
+			http.Error(w, "Failed to create feature", http.StatusInternalServerError)
+			return
+		}
+
 		for _, env := range environments {
-			if err := c.conn.CreateFeature(featureID.String(), projectID, env.ID, &createFeatureRequest); err != nil {
-				log.Println("Error creating feature:", err)
-				http.Error(w, "Failed to create feature", http.StatusInternalServerError)
-				return
-			}
-
-			newFeature, err := c.conn.GetFeature(projectID, env.ID, featureID.String())
+			features, err := c.conn.GetFeaturesByEnvironmentID(r.Context(), env.ID)
 			if err != nil {
-				log.Println("Error getting new feature:", err)
+				log.Println("Error getting features by environment ID:", err)
 				return
 			}
-			bytes, _ := json.Marshal(newFeature)
-			event := models.Event{
-				Type: "feature_created",
-				Data: bytes,
-			}
 
-			c.store.NotifyClients(event, env.ID)
+			for _, f := range features {
+				bytes, _ := json.Marshal(f)
+				event := models.Event{
+					Type: "feature_created",
+					Data: bytes,
+				}
+
+				c.store.NotifyClients(event, env.ID)
+			}
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -95,7 +98,7 @@ func (c *controller) FeaturesByEnvironmentIDController(w http.ResponseWriter, r 
 		projectID := r.PathValue("projectId")
 		environmentID := r.PathValue("environmentId")
 
-		features, err := c.conn.GetFeatures(projectID, environmentID)
+		features, err := c.conn.GetFeatures(r.Context(), projectID, environmentID)
 		if err != nil {
 			http.Error(w, "Failed to get features", http.StatusInternalServerError)
 			return
@@ -124,7 +127,7 @@ func (c *controller) FeatureByIdControllers(w http.ResponseWriter, r *http.Reque
 		environmentID := r.PathValue("environmentId")
 		featureID := r.PathValue("featureId")
 
-		feature, err := c.conn.GetFeature(projectID, environmentID, featureID)
+		feature, err := c.conn.GetFeature(r.Context(), projectID, environmentID, featureID)
 		if err != nil {
 			if errors.Is(err, db.ErrNoRows) {
 				http.Error(w, "No feature found", http.StatusNoContent)
@@ -150,7 +153,7 @@ func (c *controller) FeatureByIdControllers(w http.ResponseWriter, r *http.Reque
 		}
 		defer r.Body.Close()
 
-		if err := c.conn.UpdateFeature(projectID, environmentID, featureID, &updateFeatureRequest); err != nil {
+		if err := c.conn.UpdateFeature(r.Context(), projectID, environmentID, featureID, &updateFeatureRequest); err != nil {
 			log.Println("Error updating feature:", err)
 			http.Error(w, "Failed to update feature", http.StatusInternalServerError)
 			return
@@ -158,7 +161,7 @@ func (c *controller) FeatureByIdControllers(w http.ResponseWriter, r *http.Reque
 
 		w.WriteHeader(http.StatusOK)
 
-		updatedFeature, err := c.conn.GetFeature(projectID, environmentID, featureID)
+		updatedFeature, err := c.conn.GetFeature(r.Context(), projectID, environmentID, featureID)
 		if err != nil {
 			log.Println("Error getting new feature:", err)
 			return
@@ -175,9 +178,9 @@ func (c *controller) FeatureByIdControllers(w http.ResponseWriter, r *http.Reque
 		environmentID := r.PathValue("environmentId")
 		featureID := r.PathValue("featureId")
 
-		existingFeature, _ := c.conn.GetFeature(projectID, environmentID, featureID)
+		existingFeature, _ := c.conn.GetFeature(r.Context(), projectID, environmentID, featureID)
 
-		if err := c.conn.DeleteFeature(projectID, environmentID, featureID); err != nil {
+		if err := c.conn.DeleteFeature(r.Context(), projectID, environmentID, featureID); err != nil {
 			log.Println("Error deleting feature:", err)
 			http.Error(w, "Failed to delete feature", http.StatusInternalServerError)
 			return

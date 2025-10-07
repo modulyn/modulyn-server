@@ -12,6 +12,12 @@ var (
 	ErrNoRows = errors.New("no results found")
 )
 
+var EnableSqlLogging = false
+
+type contextKey string
+
+const CorrelationKey contextKey = "correlation_id"
+
 type Conn interface {
 	Close() error
 	FeatureDB
@@ -27,7 +33,7 @@ func (db *DB) Close() error {
 	return db.DB.Close()
 }
 
-func InitDB() (Conn, error) {
+func InitDB(enableSqlLogging bool) (Conn, error) {
 	db, err := sql.Open("sqlite3", "./modulyn.db")
 	if err != nil {
 		return nil, err
@@ -106,6 +112,8 @@ func InitDB() (Conn, error) {
 		return nil, err
 	}
 	log.Println("Created indices for the tables")
+
+	EnableSqlLogging = enableSqlLogging
 
 	return &DB{
 		db,

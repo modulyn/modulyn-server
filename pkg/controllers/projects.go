@@ -17,7 +17,7 @@ func (c *controller) ProjectsController(w http.ResponseWriter, r *http.Request) 
 	case http.MethodOptions:
 		w.WriteHeader(http.StatusNoContent)
 	case http.MethodGet:
-		projects, err := c.conn.GetProjects()
+		projects, err := c.conn.GetProjects(r.Context())
 		if err != nil {
 			log.Println("Error getting projects:", err)
 			http.Error(w, "Failed to get projects", http.StatusInternalServerError)
@@ -36,7 +36,7 @@ func (c *controller) ProjectsController(w http.ResponseWriter, r *http.Request) 
 		}
 		defer r.Body.Close()
 
-		projectID, err := c.conn.CreateProject(&createProjectRequest)
+		projectID, err := c.conn.CreateProject(r.Context(), &createProjectRequest)
 		if err != nil {
 			log.Println("Error creating project:", err)
 			http.Error(w, "Failed to create project", http.StatusInternalServerError)
@@ -71,7 +71,7 @@ func (c *controller) ProjectByIdControllers(w http.ResponseWriter, r *http.Reque
 		}
 		defer r.Body.Close()
 
-		if err := c.conn.UpdateProject(projectID, &updateProjectRequest); err != nil {
+		if err := c.conn.UpdateProject(r.Context(), projectID, &updateProjectRequest); err != nil {
 			log.Println("Error updating project:", err)
 			http.Error(w, "Failed to update project", http.StatusInternalServerError)
 			return
@@ -81,7 +81,7 @@ func (c *controller) ProjectByIdControllers(w http.ResponseWriter, r *http.Reque
 	case http.MethodDelete:
 		projectID := r.PathValue("projectId")
 
-		if err := c.conn.DeleteProject(projectID); err != nil {
+		if err := c.conn.DeleteProject(r.Context(), projectID); err != nil {
 			log.Println("Error deleting project:", err)
 			http.Error(w, "Failed to delete project", http.StatusInternalServerError)
 			return

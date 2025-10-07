@@ -46,7 +46,7 @@ func (c *controller) EventsController(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// send all features to the client when they connect
-	features, err := c.conn.GetFeaturesByEnvironmentID(sdkKey)
+	features, err := c.conn.GetFeaturesByEnvironmentID(r.Context(), sdkKey)
 	if err != nil {
 		http.Error(w, "Failed to get features", http.StatusInternalServerError)
 		return
