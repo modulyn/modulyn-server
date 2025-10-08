@@ -10,12 +10,11 @@ import (
 
 type FeatureDB interface {
 	CreateFeature(ctx context.Context, featureID, projectID string, environments []*models.Environment, createFeatureRequest *models.CreateFeatureRequest) error
-	GetFeatures(ctx context.Context, projectID, environmentID string) ([]*models.Feature, error)
+	GetFeatures(ctx context.Context, projectID string) ([]*models.Feature, error)
+	GetFeaturesByID(ctx context.Context, projectID, featureID string) ([]*models.Feature, error)
+	UpdateFeatures(ctx context.Context, projectID, featureID string, updateFeaturesRequest []*models.UpdateFeatureRequest) error
+	DeleteFeature(ctx context.Context, projectID, featureID string) error
 	GetFeaturesByEnvironmentID(ctx context.Context, environmentID string) ([]*models.Feature, error)
-	GetFeaturesByProjectID(ctx context.Context, projectID string) ([]*models.Feature, error)
-	UpdateFeature(ctx context.Context, projectID, environmentID, featureID string, updateFeatureRequest *models.UpdateFeatureRequest) error
-	DeleteFeature(ctx context.Context, projectID, environmentID, featureID string) error
-	GetFeature(ctx context.Context, projectID, environmentID, featureID string) (*models.Feature, error)
 }
 
 func (db *DB) CreateFeature(ctx context.Context, featureID, projectID string, environments []*models.Environment, createFeatureRequest *models.CreateFeatureRequest) error {
@@ -44,7 +43,7 @@ func (db *DB) CreateFeature(ctx context.Context, featureID, projectID string, en
 	return nil
 }
 
-func (db *DB) GetFeatures(ctx context.Context, projectID, environmentID string) ([]*models.Feature, error) {
+func (db *DB) GetFeatures(ctx context.Context, projectID string) ([]*models.Feature, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Println("Error starting transaction:", err)
@@ -60,9 +59,9 @@ func (db *DB) GetFeatures(ctx context.Context, projectID, environmentID string) 
 		FROM features f
 		INNER JOIN environments e ON f.environment_id = e.id
 		INNER JOIN projects p ON f.project_id = p.id
-		WHERE f.environment_id = ? AND f.project_id = ? AND f.is_deleted = 0
+		WHERE f.project_id = ? AND f.is_deleted = 0
 		ORDER BY f.updated_at DESC
-	`, environmentID, projectID)
+	`, projectID)
 	if err != nil {
 		log.Println("Error querying features from database:", err)
 		return nil, err
@@ -172,7 +171,7 @@ func (db *DB) GetFeaturesByEnvironmentID(ctx context.Context, environmentID stri
 	return features, nil
 }
 
-func (db *DB) GetFeaturesByProjectID(ctx context.Context, projectID string) ([]*models.Feature, error) {
+func (db *DB) GetFeaturesByID(ctx context.Context, projectID, featureID string) ([]*models.Feature, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Println("Error starting transaction:", err)
@@ -182,14 +181,15 @@ func (db *DB) GetFeaturesByProjectID(ctx context.Context, projectID string) ([]*
 		handleTxCommitOrRollback(tx, err)
 	}()
 
+	// Query the database for flags associated with the given SDK key
 	rows, err := tx.QueryContext(ctx, `
 		SELECT f.id, f.name, f.enabled, f.json_value, f.created_at, f.updated_at, f.deleted_at, f.environment_id, e.name, f.project_id, p.name
 		FROM features f
 		INNER JOIN environments e ON f.environment_id = e.id
 		INNER JOIN projects p ON f.project_id = p.id
-		WHERE f.project_id = ? AND f.is_deleted = 0
+		WHERE f.project_id = ? AND f.id = ? AND f.is_deleted = 0
 		ORDER BY f.updated_at DESC
-	`, projectID)
+	`, projectID, featureID)
 	if err != nil {
 		log.Println("Error querying features from database:", err)
 		return nil, err
@@ -235,7 +235,7 @@ func (db *DB) GetFeaturesByProjectID(ctx context.Context, projectID string) ([]*
 	return features, nil
 }
 
-func (db *DB) UpdateFeature(ctx context.Context, projectID, environmentID, featureID string, updateFeatureRequest *models.UpdateFeatureRequest) error {
+func (db *DB) UpdateFeatures(ctx context.Context, projectID, featureID string, updateFeaturesRequest []*models.UpdateFeatureRequest) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Println("Error starting transaction:", err)
@@ -245,20 +245,23 @@ func (db *DB) UpdateFeature(ctx context.Context, projectID, environmentID, featu
 		handleTxCommitOrRollback(tx, err)
 	}()
 
-	jsonValueBytes, _ := json.Marshal(updateFeatureRequest.JsonValue)
-	_, err = tx.ExecContext(ctx, `
-		UPDATE features
-		SET enabled = ?, json_value = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ? AND environment_id = ? AND project_id = ?
-	`, updateFeatureRequest.Enabled, jsonValueBytes, featureID, environmentID, projectID)
-	if err != nil {
-		log.Println("Error updating feature in database:", err)
-		return err
+	for _, updateFeatureRequest := range updateFeaturesRequest {
+		jsonValueBytes, _ := json.Marshal(updateFeatureRequest.JsonValue)
+		_, err = tx.ExecContext(ctx, `
+			UPDATE features
+			SET enabled = ?, json_value = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ? AND environment_id = ? AND project_id = ?
+		`, updateFeatureRequest.Enabled, jsonValueBytes, featureID, updateFeatureRequest.EnvironmentID, projectID)
+		if err != nil {
+			log.Println("Error updating feature in database:", err)
+			return err
+		}
 	}
+
 	return nil
 }
 
-func (db *DB) DeleteFeature(ctx context.Context, projectID, environmentID, featureID string) error {
+func (db *DB) DeleteFeature(ctx context.Context, projectID, featureID string) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Println("Error starting transaction:", err)
@@ -271,73 +274,11 @@ func (db *DB) DeleteFeature(ctx context.Context, projectID, environmentID, featu
 	_, err = tx.ExecContext(ctx, `
 		UPDATE features
 		SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
-		WHERE id = ? AND environment_id = ? AND project_id = ?
-	`, featureID, environmentID, projectID)
+		WHERE id = ? AND project_id = ?
+	`, featureID, projectID)
 	if err != nil {
 		log.Println("Error deleting feature in database:", err)
 		return err
 	}
 	return nil
-}
-
-func (db *DB) GetFeature(ctx context.Context, projectID, environmentID, featureID string) (*models.Feature, error) {
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		log.Println("Error starting transaction:", err)
-		return nil, err
-	}
-	defer func() {
-		handleTxCommitOrRollback(tx, err)
-	}()
-
-	rows, err := tx.QueryContext(ctx, `
-		SELECT f.id, f.name, f.enabled, f.json_value, f.created_at, f.updated_at, f.deleted_at, f.environment_id, e.name, f.project_id, p.name
-		FROM features f
-		INNER JOIN environments e ON f.environment_id = e.id
-		INNER JOIN projects p ON f.project_id = p.id
-		WHERE f.id = ? AND f.environment_id = ? AND f.project_id = ?
-	`, featureID, environmentID, projectID)
-	if err != nil {
-		log.Println("Error querying feature from database:", err)
-		return nil, err
-	}
-	defer rows.Close()
-
-	var id, name, environmentId, projectId, environmentName, projectName string
-	var enabled int
-	var jsonValue []byte
-	var createdAt, updatedAt time.Time
-	var deletedAt *time.Time
-
-	for rows.Next() {
-		if err := rows.Scan(&id, &name, &enabled, &jsonValue, &createdAt, &updatedAt, &deletedAt, &environmentId, &environmentName, &projectId, &projectName); err != nil {
-			if err.Error() == "sql: no rows in result set" {
-				log.Println("No rows found")
-				return nil, ErrNoRows
-			}
-			log.Println("Error scanning row:", err)
-			return nil, err
-		}
-	}
-
-	var jsonVal models.JsonValue
-	json.Unmarshal(jsonValue, &jsonVal)
-
-	feature := &models.Feature{
-		ID:              id,
-		Name:            name,
-		Enabled:         enabled == 1,
-		JsonValue:       jsonVal,
-		CreatedAt:       createdAt.Format(time.RFC3339),
-		UpdatedAt:       updatedAt.Format(time.RFC3339),
-		EnvironmentID:   environmentID,
-		EnvironmentName: environmentName,
-		ProjectID:       projectID,
-		ProjectName:     projectName,
-	}
-	if deletedAt != nil {
-		feature.DeletedAt = deletedAt.Format(time.RFC3339)
-	}
-
-	return feature, nil
 }

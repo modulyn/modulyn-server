@@ -31,9 +31,7 @@ func main() {
 	// features
 	mux.HandleFunc("/api/v1/projects/{projectId}/features", controllers.FeaturesController)
 
-	mux.HandleFunc("/api/v1/projects/{projectId}/environments/{environmentId}/features", controllers.FeaturesByEnvironmentIDController)
-
-	mux.HandleFunc("/api/v1/projects/{projectId}/environments/{environmentId}/features/{featureId}", controllers.FeatureByIdControllers)
+	mux.HandleFunc("/api/v1/projects/{projectId}/features/{featureId}", controllers.FeatureByIdController)
 
 	// projects
 	mux.HandleFunc("/api/v1/projects", controllers.ProjectsController)

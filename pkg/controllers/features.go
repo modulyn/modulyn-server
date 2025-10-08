@@ -2,11 +2,10 @@ package controllers
 
 import (
 	"encoding/json"
-	"errors"
 	"log"
-	"modulyn/pkg/db"
 	"modulyn/pkg/models"
 	"net/http"
+	"slices"
 
 	"github.com/google/uuid"
 )
@@ -22,7 +21,7 @@ func (c *controller) FeaturesController(w http.ResponseWriter, r *http.Request) 
 	case http.MethodGet:
 		projectID := r.PathValue("projectId")
 
-		features, err := c.conn.GetFeaturesByProjectID(r.Context(), projectID)
+		features, err := c.conn.GetFeatures(r.Context(), projectID)
 		if err != nil {
 			http.Error(w, "Failed to get features", http.StatusInternalServerError)
 			return
@@ -57,22 +56,20 @@ func (c *controller) FeaturesController(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		for _, env := range environments {
-			features, err := c.conn.GetFeaturesByEnvironmentID(r.Context(), env.ID)
-			if err != nil {
-				log.Println("Error getting features by environment ID:", err)
-				return
+		createdFeatures, err := c.conn.GetFeaturesByID(r.Context(), projectID, featureID.String())
+		if err != nil {
+			log.Println("Error getting features: ", err)
+			return
+		}
+
+		for _, f := range createdFeatures {
+			bytes, _ := json.Marshal(f)
+			event := models.Event{
+				Type: "feature_created",
+				Data: bytes,
 			}
 
-			for _, f := range features {
-				bytes, _ := json.Marshal(f)
-				event := models.Event{
-					Type: "feature_created",
-					Data: bytes,
-				}
-
-				c.store.NotifyClients(event, env.ID)
-			}
+			c.store.NotifyClients(event, f.EnvironmentID)
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -85,7 +82,7 @@ func (c *controller) FeaturesController(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (c *controller) FeaturesByEnvironmentIDController(w http.ResponseWriter, r *http.Request) {
+func (c *controller) FeatureByIdController(w http.ResponseWriter, r *http.Request) {
 	enableCors(&w)
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -96,9 +93,9 @@ func (c *controller) FeaturesByEnvironmentIDController(w http.ResponseWriter, r 
 		w.WriteHeader(http.StatusNoContent)
 	case http.MethodGet:
 		projectID := r.PathValue("projectId")
-		environmentID := r.PathValue("environmentId")
+		featureID := r.PathValue("featureId")
 
-		features, err := c.conn.GetFeatures(r.Context(), projectID, environmentID)
+		features, err := c.conn.GetFeaturesByID(r.Context(), projectID, featureID)
 		if err != nil {
 			http.Error(w, "Failed to get features", http.StatusInternalServerError)
 			return
@@ -108,52 +105,19 @@ func (c *controller) FeaturesByEnvironmentIDController(w http.ResponseWriter, r 
 		json.NewEncoder(w).Encode(models.Response{
 			Data: features,
 		})
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (c *controller) FeatureByIdControllers(w http.ResponseWriter, r *http.Request) {
-	enableCors(&w)
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Expose-Headers", "Content-Type")
-
-	switch r.Method {
-	case http.MethodOptions:
-		w.WriteHeader(http.StatusNoContent)
-	case http.MethodGet:
-		projectID := r.PathValue("projectId")
-		environmentID := r.PathValue("environmentId")
-		featureID := r.PathValue("featureId")
-
-		feature, err := c.conn.GetFeature(r.Context(), projectID, environmentID, featureID)
-		if err != nil {
-			if errors.Is(err, db.ErrNoRows) {
-				http.Error(w, "No feature found", http.StatusNoContent)
-				return
-			}
-			http.Error(w, "Failed to get feature", http.StatusInternalServerError)
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(models.Response{
-			Data: feature,
-		})
 	case http.MethodPut:
 		projectID := r.PathValue("projectId")
-		environmentID := r.PathValue("environmentId")
 		featureID := r.PathValue("featureId")
-		var updateFeatureRequest models.UpdateFeatureRequest
-		if err := json.NewDecoder(r.Body).Decode(&updateFeatureRequest); err != nil {
+
+		var updateFeaturesRequest []*models.UpdateFeatureRequest
+		if err := json.NewDecoder(r.Body).Decode(&updateFeaturesRequest); err != nil {
 			log.Println("Error decoding request body:", err)
 			http.Error(w, "Invalid request body", http.StatusBadRequest)
 			return
 		}
 		defer r.Body.Close()
 
-		if err := c.conn.UpdateFeature(r.Context(), projectID, environmentID, featureID, &updateFeatureRequest); err != nil {
+		if err := c.conn.UpdateFeatures(r.Context(), projectID, featureID, updateFeaturesRequest); err != nil {
 			log.Println("Error updating feature:", err)
 			http.Error(w, "Failed to update feature", http.StatusInternalServerError)
 			return
@@ -161,26 +125,35 @@ func (c *controller) FeatureByIdControllers(w http.ResponseWriter, r *http.Reque
 
 		w.WriteHeader(http.StatusOK)
 
-		updatedFeature, err := c.conn.GetFeature(r.Context(), projectID, environmentID, featureID)
+		newlyUpdatedFeatures, err := c.conn.GetFeaturesByID(r.Context(), projectID, featureID)
 		if err != nil {
 			log.Println("Error getting new feature:", err)
 			return
 		}
-		bytes, _ := json.Marshal(updatedFeature)
-		event := models.Event{
-			Type: "feature_updated",
-			Data: bytes,
-		}
 
-		c.store.NotifyClients(event, environmentID)
+		for _, updateFeatureRequest := range updateFeaturesRequest {
+			i := slices.IndexFunc(newlyUpdatedFeatures, func(f *models.Feature) bool {
+				return f.EnvironmentID == updateFeatureRequest.EnvironmentID
+			})
+			if i < 0 {
+				continue
+			}
+
+			bytes, _ := json.Marshal(newlyUpdatedFeatures[i])
+			event := models.Event{
+				Type: "feature_updated",
+				Data: bytes,
+			}
+
+			c.store.NotifyClients(event, updateFeatureRequest.EnvironmentID)
+		}
 	case http.MethodDelete:
 		projectID := r.PathValue("projectId")
-		environmentID := r.PathValue("environmentId")
 		featureID := r.PathValue("featureId")
 
-		existingFeature, _ := c.conn.GetFeature(r.Context(), projectID, environmentID, featureID)
+		existingFeature, _ := c.conn.GetFeaturesByID(r.Context(), projectID, featureID)
 
-		if err := c.conn.DeleteFeature(r.Context(), projectID, environmentID, featureID); err != nil {
+		if err := c.conn.DeleteFeature(r.Context(), projectID, featureID); err != nil {
 			log.Println("Error deleting feature:", err)
 			http.Error(w, "Failed to delete feature", http.StatusInternalServerError)
 			return
@@ -188,14 +161,14 @@ func (c *controller) FeatureByIdControllers(w http.ResponseWriter, r *http.Reque
 
 		w.WriteHeader(http.StatusOK)
 
-		bytes, _ := json.Marshal(existingFeature)
-		event := models.Event{
-			Type: "feature_deleted",
-			Data: bytes,
-		}
+		for _, feature := range existingFeature {
+			bytes, _ := json.Marshal(feature)
+			event := models.Event{
+				Type: "feature_deleted",
+				Data: bytes,
+			}
 
-		c.store.NotifyClients(event, environmentID)
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			c.store.NotifyClients(event, feature.EnvironmentID)
+		}
 	}
 }

@@ -19,8 +19,9 @@ type CreateFeatureRequest struct {
 }
 
 type UpdateFeatureRequest struct {
-	Enabled   bool      `json:"enabled"`
-	JsonValue JsonValue `json:"jsonValue,omitempty"`
+	EnvironmentID string    `json:"environmentId"`
+	Enabled       bool      `json:"enabled"`
+	JsonValue     JsonValue `json:"jsonValue,omitempty"`
 }
 
 type JsonValue struct {
