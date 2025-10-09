@@ -80,6 +80,7 @@ func InitDB(enableSqlLogging bool) (Conn, error) {
 		CREATE TABLE IF NOT EXISTS features (
 			id TEXT,
 			name TEXT NOT NULL,
+			label TEXT NOT NULL,
 			description TEXT,
 			environment_id TEXT NOT NULL,
 			project_id TEXT NOT NULL,

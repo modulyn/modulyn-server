@@ -33,3 +33,9 @@ func interpolateSQL(query string, args ...any) string {
 	}
 	return b.String()
 }
+
+func transformLabel(featureName string) string {
+	allLower := strings.ToLower(featureName)
+	allLower = strings.ReplaceAll(allLower, " ", "-")
+	return allLower
+}

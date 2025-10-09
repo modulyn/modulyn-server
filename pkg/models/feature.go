@@ -3,6 +3,7 @@ package models
 type Feature struct {
 	ID              string    `json:"id"`
 	Name            string    `json:"name"`
+	Label           string    `json:"label"`
 	Description     string    `json:"description"`
 	Enabled         bool      `json:"enabled"`
 	JsonValue       JsonValue `json:"jsonValue"`
