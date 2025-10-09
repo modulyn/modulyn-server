@@ -3,6 +3,7 @@ package models
 type Feature struct {
 	ID              string    `json:"id"`
 	Name            string    `json:"name"`
+	Description     string    `json:"description"`
 	Enabled         bool      `json:"enabled"`
 	JsonValue       JsonValue `json:"jsonValue"`
 	CreatedAt       string    `json:"createdAt"`
@@ -15,7 +16,8 @@ type Feature struct {
 }
 
 type CreateFeatureRequest struct {
-	Name string `json:"name"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
 type UpdateFeatureRequest struct {

@@ -30,10 +30,10 @@ func (db *DB) CreateFeature(ctx context.Context, featureID, projectID string, en
 	for _, environment := range environments {
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO features 
-			(id, name, enabled, json_value, environment_id, project_id)
+			(id, name, description, enabled, json_value, environment_id, project_id)
 			VALUES 
-			(?, ?, ?, ?, ?, ?)
-		`, featureID, createFeatureRequest.Name, false, nil, environment.ID, projectID)
+			(?, ?, ?, ?, ?, ?, ?)
+		`, featureID, createFeatureRequest.Name, createFeatureRequest.Description, false, nil, environment.ID, projectID)
 		if err != nil {
 			log.Println("Error inserting feature in database:", err)
 			return err
@@ -55,12 +55,12 @@ func (db *DB) GetFeatures(ctx context.Context, projectID string) ([]*models.Feat
 
 	// Query the database for flags associated with the given SDK key
 	rows, err := tx.QueryContext(ctx, `
-		SELECT f.id, f.name, f.enabled, f.json_value, f.created_at, f.updated_at, f.deleted_at, f.environment_id, e.name, f.project_id, p.name
+		SELECT f.id, f.name, f.description, f.enabled, f.json_value, f.created_at, f.updated_at, f.deleted_at, f.environment_id, e.name, f.project_id, p.name
 		FROM features f
 		INNER JOIN environments e ON f.environment_id = e.id
 		INNER JOIN projects p ON f.project_id = p.id
 		WHERE f.project_id = ? AND f.is_deleted = 0
-		ORDER BY f.updated_at DESC
+		ORDER BY f.name, e.name
 	`, projectID)
 	if err != nil {
 		log.Println("Error querying features from database:", err)
@@ -71,13 +71,13 @@ func (db *DB) GetFeatures(ctx context.Context, projectID string) ([]*models.Feat
 	features := make([]*models.Feature, 0)
 
 	for rows.Next() {
-		var id, name, environmentID, projectID, environmentName, projectName string
+		var id, name, description, environmentID, projectID, environmentName, projectName string
 		var enabled int
 		var jsonValue []byte
 		var createdAt, updatedAt time.Time
 		var deletedAt *time.Time
 
-		if err := rows.Scan(&id, &name, &enabled, &jsonValue, &createdAt, &updatedAt, &deletedAt, &environmentID, &environmentName, &projectID, &projectName); err != nil {
+		if err := rows.Scan(&id, &name, &description, &enabled, &jsonValue, &createdAt, &updatedAt, &deletedAt, &environmentID, &environmentName, &projectID, &projectName); err != nil {
 			log.Println("Error scanning row:", err)
 			return nil, err
 		}
@@ -88,6 +88,7 @@ func (db *DB) GetFeatures(ctx context.Context, projectID string) ([]*models.Feat
 		feature := &models.Feature{
 			ID:              id,
 			Name:            name,
+			Description:     description,
 			Enabled:         enabled == 1,
 			JsonValue:       jsonVal,
 			CreatedAt:       createdAt.Format(time.RFC3339),
@@ -119,12 +120,12 @@ func (db *DB) GetFeaturesByEnvironmentID(ctx context.Context, environmentID stri
 
 	// Query the database for flags associated with the given SDK key
 	rows, err := tx.QueryContext(ctx, `
-		SELECT f.id, f.name, f.enabled, f.json_value, f.created_at, f.updated_at, f.deleted_at, f.environment_id, e.name, f.project_id, p.name
+		SELECT f.id, f.name, f.description, f.enabled, f.json_value, f.created_at, f.updated_at, f.deleted_at, f.environment_id, e.name, f.project_id, p.name
 		FROM features f
 		INNER JOIN environments e ON f.environment_id = e.id
 		INNER JOIN projects p ON f.project_id = p.id
 		WHERE f.environment_id = ? AND f.is_deleted = 0
-		ORDER BY f.updated_at DESC
+		ORDER BY f.name, e.name
 	`, environmentID)
 	if err != nil {
 		log.Println("Error querying features from database:", err)
@@ -135,13 +136,13 @@ func (db *DB) GetFeaturesByEnvironmentID(ctx context.Context, environmentID stri
 	features := make([]*models.Feature, 0)
 
 	for rows.Next() {
-		var id, name, environmentID, projectID, environmentName, projectName string
+		var id, name, description, environmentID, projectID, environmentName, projectName string
 		var enabled int
 		var jsonValue []byte
 		var createdAt, updatedAt time.Time
 		var deletedAt *time.Time
 
-		if err := rows.Scan(&id, &name, &enabled, &jsonValue, &createdAt, &updatedAt, &deletedAt, &environmentID, &environmentName, &projectID, &projectName); err != nil {
+		if err := rows.Scan(&id, &name, &description, &enabled, &jsonValue, &createdAt, &updatedAt, &deletedAt, &environmentID, &environmentName, &projectID, &projectName); err != nil {
 			log.Println("Error scanning row:", err)
 			return nil, err
 		}
@@ -152,6 +153,7 @@ func (db *DB) GetFeaturesByEnvironmentID(ctx context.Context, environmentID stri
 		feature := &models.Feature{
 			ID:              id,
 			Name:            name,
+			Description:     description,
 			Enabled:         enabled == 1,
 			JsonValue:       jsonVal,
 			CreatedAt:       createdAt.Format(time.RFC3339),
@@ -183,12 +185,12 @@ func (db *DB) GetFeaturesByID(ctx context.Context, projectID, featureID string) 
 
 	// Query the database for flags associated with the given SDK key
 	rows, err := tx.QueryContext(ctx, `
-		SELECT f.id, f.name, f.enabled, f.json_value, f.created_at, f.updated_at, f.deleted_at, f.environment_id, e.name, f.project_id, p.name
+		SELECT f.id, f.name, f.description, f.enabled, f.json_value, f.created_at, f.updated_at, f.deleted_at, f.environment_id, e.name, f.project_id, p.name
 		FROM features f
 		INNER JOIN environments e ON f.environment_id = e.id
 		INNER JOIN projects p ON f.project_id = p.id
 		WHERE f.project_id = ? AND f.id = ? AND f.is_deleted = 0
-		ORDER BY f.updated_at DESC
+		ORDER BY f.name, e.name
 	`, projectID, featureID)
 	if err != nil {
 		log.Println("Error querying features from database:", err)
@@ -199,13 +201,13 @@ func (db *DB) GetFeaturesByID(ctx context.Context, projectID, featureID string) 
 	features := make([]*models.Feature, 0)
 
 	for rows.Next() {
-		var id, name, environmentID, projectID, environmentName, projectName string
+		var id, name, description, environmentID, projectID, environmentName, projectName string
 		var enabled int
 		var jsonValue []byte
 		var createdAt, updatedAt time.Time
 		var deletedAt *time.Time
 
-		if err := rows.Scan(&id, &name, &enabled, &jsonValue, &createdAt, &updatedAt, &deletedAt, &environmentID, &environmentName, &projectID, &projectName); err != nil {
+		if err := rows.Scan(&id, &name, &description, &enabled, &jsonValue, &createdAt, &updatedAt, &deletedAt, &environmentID, &environmentName, &projectID, &projectName); err != nil {
 			log.Println("Error scanning row:", err)
 			return nil, err
 		}
@@ -216,6 +218,7 @@ func (db *DB) GetFeaturesByID(ctx context.Context, projectID, featureID string) 
 		feature := &models.Feature{
 			ID:              id,
 			Name:            name,
+			Description:     description,
 			Enabled:         enabled == 1,
 			JsonValue:       jsonVal,
 			CreatedAt:       createdAt.Format(time.RFC3339),
