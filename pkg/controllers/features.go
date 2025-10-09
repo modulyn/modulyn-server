@@ -20,8 +20,11 @@ func (c *controller) FeaturesController(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusNoContent)
 	case http.MethodGet:
 		projectID := r.PathValue("projectId")
+		queryParams := r.URL.Query()
 
-		features, err := c.conn.GetFeatures(r.Context(), projectID)
+		searchTerm := queryParams.Get("search")
+
+		features, err := c.conn.GetFeatures(r.Context(), projectID, searchTerm)
 		if err != nil {
 			http.Error(w, "Failed to get features", http.StatusInternalServerError)
 			return

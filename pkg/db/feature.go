@@ -2,7 +2,9 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"modulyn/pkg/models"
 	"time"
@@ -10,7 +12,7 @@ import (
 
 type FeatureDB interface {
 	CreateFeature(ctx context.Context, featureID, projectID string, environments []*models.Environment, createFeatureRequest *models.CreateFeatureRequest) error
-	GetFeatures(ctx context.Context, projectID string) ([]*models.Feature, error)
+	GetFeatures(ctx context.Context, projectID, searchTerm string) ([]*models.Feature, error)
 	GetFeaturesByID(ctx context.Context, projectID, featureID string) ([]*models.Feature, error)
 	UpdateFeatures(ctx context.Context, projectID, featureID string, updateFeaturesRequest []*models.UpdateFeatureRequest) error
 	DeleteFeature(ctx context.Context, projectID, featureID string) error
@@ -45,7 +47,7 @@ func (db *DB) CreateFeature(ctx context.Context, featureID, projectID string, en
 	return nil
 }
 
-func (db *DB) GetFeatures(ctx context.Context, projectID string) ([]*models.Feature, error) {
+func (db *DB) GetFeatures(ctx context.Context, projectID, searchTerm string) ([]*models.Feature, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Println("Error starting transaction:", err)
@@ -55,15 +57,27 @@ func (db *DB) GetFeatures(ctx context.Context, projectID string) ([]*models.Feat
 		handleTxCommitOrRollback(tx, err)
 	}()
 
-	// Query the database for flags associated with the given SDK key
-	rows, err := tx.QueryContext(ctx, `
-		SELECT f.id, f.name, f.label, f.description, f.enabled, f.json_value, f.created_at, f.updated_at, f.deleted_at, f.environment_id, e.name, f.project_id, p.name
-		FROM features f
-		INNER JOIN environments e ON f.environment_id = e.id
-		INNER JOIN projects p ON f.project_id = p.id
-		WHERE f.project_id = ? AND f.is_deleted = 0
-		ORDER BY f.name, e.name
-	`, projectID)
+	var rows *sql.Rows
+
+	if searchTerm != "" {
+		rows, err = tx.QueryContext(ctx, `
+			SELECT f.id, f.name, f.label, f.description, f.enabled, f.json_value, f.created_at, f.updated_at, f.deleted_at, f.environment_id, e.name, f.project_id, p.name
+			FROM features f
+			INNER JOIN environments e ON f.environment_id = e.id
+			INNER JOIN projects p ON f.project_id = p.id
+			WHERE f.project_id = ? AND f.is_deleted = 0 AND (f.name like ? OR f.label like ?)
+			ORDER BY f.name, e.name
+		`, projectID, fmt.Sprintf("%%%s%%", searchTerm), fmt.Sprintf("%%%s%%", searchTerm))
+	} else {
+		rows, err = tx.QueryContext(ctx, `
+			SELECT f.id, f.name, f.label, f.description, f.enabled, f.json_value, f.created_at, f.updated_at, f.deleted_at, f.environment_id, e.name, f.project_id, p.name
+			FROM features f
+			INNER JOIN environments e ON f.environment_id = e.id
+			INNER JOIN projects p ON f.project_id = p.id
+			WHERE f.project_id = ? AND f.is_deleted = 0
+			ORDER BY f.name, e.name
+		`, projectID)
+	}
 	if err != nil {
 		log.Println("Error querying features from database:", err)
 		return nil, err
