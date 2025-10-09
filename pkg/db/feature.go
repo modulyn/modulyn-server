@@ -71,7 +71,8 @@ func (db *DB) GetFeatures(ctx context.Context, projectID string) ([]*models.Feat
 	features := make([]*models.Feature, 0)
 
 	for rows.Next() {
-		var id, name, description, environmentID, projectID, environmentName, projectName string
+		var id, name, environmentID, projectID, environmentName, projectName string
+		var description *string
 		var enabled int
 		var jsonValue []byte
 		var createdAt, updatedAt time.Time
@@ -88,7 +89,6 @@ func (db *DB) GetFeatures(ctx context.Context, projectID string) ([]*models.Feat
 		feature := &models.Feature{
 			ID:              id,
 			Name:            name,
-			Description:     description,
 			Enabled:         enabled == 1,
 			JsonValue:       jsonVal,
 			CreatedAt:       createdAt.Format(time.RFC3339),
@@ -100,6 +100,9 @@ func (db *DB) GetFeatures(ctx context.Context, projectID string) ([]*models.Feat
 		}
 		if deletedAt != nil {
 			feature.DeletedAt = deletedAt.Format(time.RFC3339)
+		}
+		if description != nil {
+			feature.Description = *description
 		}
 
 		features = append(features, feature)
@@ -136,7 +139,8 @@ func (db *DB) GetFeaturesByEnvironmentID(ctx context.Context, environmentID stri
 	features := make([]*models.Feature, 0)
 
 	for rows.Next() {
-		var id, name, description, environmentID, projectID, environmentName, projectName string
+		var id, name, environmentID, projectID, environmentName, projectName string
+		var description *string
 		var enabled int
 		var jsonValue []byte
 		var createdAt, updatedAt time.Time
@@ -153,7 +157,6 @@ func (db *DB) GetFeaturesByEnvironmentID(ctx context.Context, environmentID stri
 		feature := &models.Feature{
 			ID:              id,
 			Name:            name,
-			Description:     description,
 			Enabled:         enabled == 1,
 			JsonValue:       jsonVal,
 			CreatedAt:       createdAt.Format(time.RFC3339),
@@ -165,6 +168,9 @@ func (db *DB) GetFeaturesByEnvironmentID(ctx context.Context, environmentID stri
 		}
 		if deletedAt != nil {
 			feature.DeletedAt = deletedAt.Format(time.RFC3339)
+		}
+		if description != nil {
+			feature.Description = *description
 		}
 
 		features = append(features, feature)
@@ -201,7 +207,8 @@ func (db *DB) GetFeaturesByID(ctx context.Context, projectID, featureID string) 
 	features := make([]*models.Feature, 0)
 
 	for rows.Next() {
-		var id, name, description, environmentID, projectID, environmentName, projectName string
+		var id, name, environmentID, projectID, environmentName, projectName string
+		var description *string
 		var enabled int
 		var jsonValue []byte
 		var createdAt, updatedAt time.Time
@@ -218,7 +225,6 @@ func (db *DB) GetFeaturesByID(ctx context.Context, projectID, featureID string) 
 		feature := &models.Feature{
 			ID:              id,
 			Name:            name,
-			Description:     description,
 			Enabled:         enabled == 1,
 			JsonValue:       jsonVal,
 			CreatedAt:       createdAt.Format(time.RFC3339),
@@ -230,6 +236,9 @@ func (db *DB) GetFeaturesByID(ctx context.Context, projectID, featureID string) 
 		}
 		if deletedAt != nil {
 			feature.DeletedAt = deletedAt.Format(time.RFC3339)
+		}
+		if description != nil {
+			feature.Description = *description
 		}
 
 		features = append(features, feature)
